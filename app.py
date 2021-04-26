@@ -15,7 +15,7 @@ CORS(app)
 bert = app.add_service(name=settings.MQ_EXCHANGE, remote=settings.DISTRIBUTED)
 
 if not settings.DISTRIBUTED:
-    from bert_tagger_service import BertTaggerWorker
+    from bert_tagger_worker import BertTaggerWorker
 
     bert.add_worker(BertTaggerWorker())
 
