@@ -12,7 +12,7 @@ logger = logging.getLogger("gunicorn.error")
 app = Nauron(__name__, timeout=settings.MESSAGE_TIMEOUT, mq_parameters=settings.MQ_PARAMS)
 CORS(app)
 
-bert = app.add_service(name=settings.MQ_EXCHANGE, remote=settings.DISTRIBUTED)
+bert = app.add_service(name=settings.SERVICE_NAME, remote=settings.DISTRIBUTED)
 
 if not settings.DISTRIBUTED:
     from bert_tagger_worker import BertTaggerWorker

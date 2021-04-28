@@ -12,7 +12,7 @@ from bert_tagger import BertTagger
 
 import settings
 
-logger = logging.getLogger(settings.MQ_EXCHANGE)
+logger = logging.getLogger(settings.SERVICE_NAME)
 
 
 class BertTaggerRequestSchema(Schema):
@@ -54,5 +54,5 @@ class BertTaggerWorker(Worker):
 if __name__ == "__main__":
     worker = BertTaggerWorker()
     worker.start(connection_parameters=settings.MQ_PARAMS,
-                 service_name=settings.MQ_EXCHANGE,
-                 routing_key=settings.MQ_QUEUE_NAME)
+                 service_name=settings.SERVICE_NAME,
+                 routing_key=settings.ROUTING_KEY)

@@ -4,7 +4,7 @@ ARG NAURON_MODE=""
 ENV NAURON_MODE=$NAURON_MODE
 
 COPY environment* ./
-RUN if [ "$NAURON_MODE" = "API" ]; then \
+RUN if [ "$NAURON_MODE" = "GATEWAY" ]; then \
         conda env create -f environment_api.yml -n nauron; \
     elif [ "$NAURON_MODE" = "WORKER" ]; then \
         conda env create -f environment_worker.yml -n nauron; \
@@ -21,11 +21,12 @@ RUN git clone https://github.com/TartuNLP/nauron.git && pip install -e nauron/
 # Restore original shell
 SHELL ["/bin/bash", "-c"]
 
+WORKDIR /var/log/nauron
 WORKDIR /bert_tagger
 VOLUME /bert_tagger/bert_model
 
 RUN if [ "$NAURON_MODE" = "WORKER" ]; then \
-        echo "python bert_tagger_service.py" > run.sh; \
+        echo "python bert_tagger_worker.py" > run.sh; \
     else \
         echo "gunicorn --config config/gunicorn.ini.py --log-config config/logging.ini app:app" > run.sh; \
     fi
