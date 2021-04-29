@@ -8,3 +8,5 @@ dependencies:
   - marshmallow==3.10.0
   - gunicorn==20.0.4
   - pip
+  - pip:
+    - nauron==1.2

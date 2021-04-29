@@ -52,7 +52,7 @@ class BertTaggerWorker(Worker):
 
 
 if __name__ == "__main__":
-    worker = BertTaggerWorker()
+    worker = BertTaggerWorker(bert_location=settings.MODEL_PATH)
     worker.start(connection_parameters=settings.MQ_PARAMS,
                  service_name=settings.SERVICE_NAME,
                  routing_key=settings.ROUTING_KEY)

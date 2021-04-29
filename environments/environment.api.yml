@@ -11,4 +11,5 @@ dependencies:
   - gunicorn==20.0.4
   - pip
   - pip:
+      - nauron==1.2
       - estnltk-light

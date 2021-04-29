@@ -10,4 +10,5 @@ dependencies:
   - marshmallow==3.10.0
   - pip
   - pip:
+      - nauron==1.2
       - estnltk-light
