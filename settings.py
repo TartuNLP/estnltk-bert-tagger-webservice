@@ -8,10 +8,7 @@ from dotenv import load_dotenv
 
 
 def _load_config() -> Tuple[ConfigParser, str]:
-    parser = ArgumentParser(
-        description="Backend NMT server for Sockeye models."
-    )
-
+    parser = ArgumentParser()
     parser.add_argument('--nauron-config', type=FileType('r'), default='config/config.ini',
                         help="Path to config file.")
     parser.add_argument('--log-config', type=FileType('r'), default='config/logging.ini',
