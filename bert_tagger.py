@@ -1,9 +1,9 @@
 #
 #   Based on:
 #       https://github.com/estnltk/estnltk/blob/devel_1.6/estnltk/taggers/embeddings/bert/bert_tagger.py
-#       ( commit: https://github.com/estnltk/estnltk/tree/b7a8a8d753229f60ee46ba0b88645600d5f8e4ee )
+#       ( commit: https://github.com/estnltk/estnltk/tree/0c8c349f4a60efc2a68588e4069fed959cf91bf4 )
 #
- 
+
 import torch
 from typing import MutableMapping, List
 from transformers import BertTokenizer, logging, BertModel
@@ -45,7 +45,6 @@ class BertTagger(Tagger):
         self.input_layers = [sentences_layer]
 
         self.bert_model = BertModel.from_pretrained(bert_location, output_hidden_states=True)
-
         self.tokenizer = BertTokenizer.from_pretrained(self.bert_location)
 
         self.output_attributes = ['token', 'bert_embedding']
@@ -58,31 +57,26 @@ class BertTagger(Tagger):
         embeddings_layer = Layer(name=self.output_layer, text_object=text, attributes=self.output_attributes,
                                  ambiguous=True)
 
-        start, i = 0, 0
-        word_spans = []
-
         for k, sentence in enumerate(sentences_layer):
+            word_spans = []
 
             for word in sentence:
                 word_spans.append((word.start, word.end, word.text))
             sent_text = sentence.enclosing_text
 
+            start, i, end, word_span, word = word_spans[0][0], 0, word_spans[0][1], word_spans[0], word_spans[0][2]
+
             embeddings = get_embeddings(sent_text, self.bert_model, self.tokenizer, self.method, self.bert_layers)[
-                         1:-1]  # first one in start token, and last one is sep token
+                         1:-1]  # first one is cls token, and last one is sep token
             tokens = self.tokenizer.tokenize(sent_text)
+
             assert len(tokens) == len(embeddings)
-            if k != 0:  # move the start manually when next sentence starts
-                start = word_spans[i][0]
 
             if self.token_level:  # annotates tokens
+
                 for j, packed in enumerate(zip(embeddings, tokens)):
                     token_emb, token_init = packed[0], packed[1]
 
-                    if not token_init.startswith("#") and j != 0:  # move to next word
-                        if start == word_spans[i][1]:  # BERT's wordpiece tokenizer can tokenize differently
-                            i += 1  # next word starts
-                            word_span = word_spans[i]
-                            start = word_span[0]  # the start id of this word
                     if self.method == 'all':
                         embedding = []
                         for tok_emb in token_emb:
@@ -94,85 +88,91 @@ class BertTagger(Tagger):
                         embedding = [float(t) for t in token_emb]
 
                     attributes = {'token': token_init, 'bert_embedding': embedding}
-                    token = token_init.strip()
-                    embeddings_layer.add_annotation((start, start + len(token.replace('#', ''))), **attributes)
-                    start += len(token.replace('#', ''))  # adding token length to the current pointer
 
-                i += 1  # move the pointer manually
+                    if token_init == '[UNK]':
+                        token_end = end  # if token was UNK, set the end to word end
+                    else:
+                        token = token_init.strip()  # if not, then len(token)
+                        token_end = start + len(token.replace('#', ''))
+                        word = word.replace(token.replace('#', ''), '', 1)  # keep the next part of word for later use
 
-            else:  # annotates full words, adding the token level embedding together
+                    if len(word) != 0:
+                        if word[0] == ' ' and end > token_end + 1:  # check if is multiword
+                            token_end += 1
+                            word = word[1:]
+                    embeddings_layer.add_annotation((start, token_end), **attributes)
+                    start = token_end  # adding token length to the current pointer
+                    if start == end:  # new word starts
+                        i += 1
+                        if len(word_spans) > i:  # update the values for the next word
+                            word_span = word_spans[i]
+                            start = word_span[0]
+                            end = word_span[1]
+                            word = word_span[2]
+
+
+            else:  # annotates full words, adding the token level embeddings together
                 collected_tokens = []
                 collected_embeddings = []
+                counter = word_spans[0][0]
+
                 for j, packed in enumerate(zip(embeddings, tokens)):
                     token_emb, token_init = packed[0], packed[1]
+                    span = word_spans[i]
+                    length = span[1] - span[0]
 
-                    if i == 0 and j == 0:
-                        start = 0
-                        collected_embeddings.append(token_emb)
-                        collected_tokens.append(token_init)
-                        start += len(token_init)
+                    if length == len(
+                            token_init.replace('#', '')) or token_init == '[UNK]':  # Full word token or UNK token
 
-                    if i != 0 and j == 0:
-                        collected_tokens = [token_init]
-                        collected_embeddings = [token_emb]
-                        start = word_spans[i][0]
-
-                        start += len(token_init)
-
-                    if not token_init.startswith("#") and j != 0:  # move to next word
-                        if start == word_spans[i][1]:  # BERT's wordpiece tokenizer can tokenize differently
-
-                            if collected_embeddings:
-                                if self.method == 'all':
-                                    embedding = []
-                                    for tok_embs in collected_embeddings:
-                                        token_embs = []
-                                        for embs in tok_embs:
-                                            token_embs_emb = []
-                                            for emb in embs:
-                                                token_embs_emb.append(float(emb))
-                                            token_embs.append(token_embs_emb)
-                                        embedding.append(token_embs)
-                                else:
-                                    embedding = [float(t) for t in np.sum(collected_embeddings, 0)]
-
-                                attributes = {'token': collected_tokens, 'bert_embedding': embedding}
-                                embeddings_layer.add_annotation((word_spans[i][0], word_spans[i][1]),
-                                                                **attributes)
-
-                            i += 1  # next word starts
-                            start = word_spans[i][0]  # the start id of this word
-                            collected_embeddings = [token_emb]
-                            collected_tokens = [token_init]
-                            start += len(token_init)
+                        if self.method == 'all':
+                            embedding = [[float(e) for e in le] for le in token_emb]
                         else:
-                            start += len(token_init)
-                            collected_tokens.append(token_init)
-                            collected_embeddings.append(token_emb)
-                    elif token_init.startswith("#"):
-                        collected_tokens.append(token_init)
+                            embedding = [float(e) for e in token_emb]
+                        attributes = {'token': token_init, 'bert_embedding': embedding}
+                        embeddings_layer.add_annotation((word_spans[i][0], word_spans[i][1]),
+                                                        **attributes)
+                        collected_tokens, collected_embeddings = [], []
+                        i += 1
+                        if len(word_spans) > i:
+                            counter = word_spans[i][0]
+                    elif length > len(token_init) and not token_init.startswith('#') and counter == span[
+                        0]:  # first in many tokens
                         collected_embeddings.append(token_emb)
-                        start += len(token_init.replace("#", ''))
+                        collected_tokens.append(token_init)
+                        counter += len(token_init)
+                    elif (length > len(token_init.replace('#', '')) and token_init.startswith('#') and counter > span[
+                        0]) or (
+                            length > len(token_init.replace('#', '')) and not token_init.startswith('#') and counter >
+                            span[
+                                0]):  # in the middle
+                        collected_embeddings.append(token_emb)
+                        collected_tokens.append(token_init)
+                        counter += len(token_init.replace('#', ''))
 
-                if collected_tokens:
-                    if self.method == 'all':
-                        embedding = []
-                        for tok_embs in collected_embeddings:
-                            token_embs = []
-                            for embs in tok_embs:
-                                token_embs_emb = []
-                                for emb in embs:
-                                    token_embs_emb.append(float(emb))
-                                token_embs.append(token_embs_emb)
-                            embedding.append(token_embs)
-                    else:
-                        embedding = [float(t) for t in np.sum(collected_embeddings, 0)]
+                        if counter == span[1] or counter + span[2].count(' ') == span[
+                            1]:  # check if in the end of the word
+                            if self.method == 'all':
+                                embedding = []
+                                for tok_embs in collected_embeddings:
+                                    token_embs = []
+                                    for embs in tok_embs:
+                                        token_embs_emb = []
+                                        for emb in embs:
+                                            token_embs_emb.append(float(emb))
+                                        token_embs.append(token_embs_emb)
+                                    embedding.append(token_embs)
+                            else:
+                                embedding = [float(t) for t in np.sum(collected_embeddings, 0)]
 
-                    attributes = {'token': collected_tokens, 'bert_embedding': embedding}
-                    embeddings_layer.add_annotation((word_spans[i][0], word_spans[i][1]),
-                                                    **attributes)
+                            attributes = {'token': collected_tokens, 'bert_embedding': embedding}
+                            embeddings_layer.add_annotation((word_spans[i][0], word_spans[i][1]),
+                                                            **attributes)
+                            collected_embeddings = []
+                            collected_tokens = []
 
-                i += 1  # move the pointer manually
+                            i += 1
+                            if len(word_spans) > i:
+                                counter = word_spans[i][0]
 
         return embeddings_layer
 
