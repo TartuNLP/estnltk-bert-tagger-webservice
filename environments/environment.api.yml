@@ -12,4 +12,4 @@ dependencies:
   - pip
   - pip:
       - nauron==1.2
-      - estnltk-light
+      - estnltk-light==1.6.7.6b0
