@@ -34,7 +34,7 @@ if DISTRIBUTED:
 
     MQ_PARAMS = pika.ConnectionParameters(
         host=environ.get('MQ_HOST'),
-        port=environ.get('MQ_PORT'),
+        port=int(environ.get('MQ_PORT')),
         credentials=pika.credentials.PlainCredentials(username=environ.get('MQ_USERNAME'),
                                                       password=environ.get('MQ_PASSWORD')))
 
