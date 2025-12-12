@@ -1,6 +1,8 @@
 import logging
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -23,16 +25,16 @@ app.add_middleware(
 Text = load_text_class()
 tagger = BertTagger(bert_model=settings.bert_model)
 
-class Request(BaseModel):
+class RequestModel(BaseModel):
     text: str = Field(...)
     meta: dict = Field(...)
     layers: str = Field(...)
-    output_layer: str = Field(None)
-    parameters: dict = Field(None)
+    output_layer: Optional[str] = Field(None)
+    parameters: Optional[dict] = Field(None)
 
 
 @app.post('/estnltk/tagger/bert')
-def tagger_bert(body: Request):
+def tagger_bert(body: RequestModel):
     if len(str(body)) > settings.max_content_length:
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
@@ -54,11 +56,11 @@ def tagger_bert(body: Request):
         logger.exception('Internal error at input processing')
         raise HTTPException(status_code=500, detail='Internal error at input processing')
 
-@app.get('/estnltk/tagger/bert/about')
+@app.get('/estnltk/tagger/bert/about', response_class=HTMLResponse)
 def tagger_bert_about():
     return 'Tags BERT embeddings using EstNLTK 1.6.7beta webservice.'
 
 
-@app.get('/estnltk/tagger/bert/status')
+@app.get('/estnltk/tagger/bert/status', response_class=HTMLResponse)
 def tagger_bert_status():
     return 'OK'
