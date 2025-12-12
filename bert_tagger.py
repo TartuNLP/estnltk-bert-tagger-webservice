@@ -9,16 +9,17 @@ from typing import MutableMapping, List
 from transformers import BertTokenizer, logging, BertModel
 
 logging.set_verbosity(30)
-from estnltk.text import Text
-from estnltk.taggers import Tagger
-from estnltk.layer.layer import Layer
+from estnltk_core.common import load_text_class
+from estnltk_core import Tagger, Layer
 import numpy as np
+
+Text = load_text_class()
 
 
 class BertTagger(Tagger):
     """Tags BERT embeddings."""
 
-    def __init__(self, bert_location: str, sentences_layer: str = 'sentences',
+    def __init__(self, bert_model: str, sentences_layer: str = 'sentences',
                  token_level: bool = True,
                  output_layer: str = 'bert_embeddings', bert_layers: List[int] = None, method='concatenate'):
 
@@ -32,11 +33,7 @@ class BertTagger(Tagger):
                           "layers. "
                     raise Exception(msg)
         self.conf_param = ('bert_location', 'bert_model', 'tokenizer', 'method', 'token_level', 'bert_layers')
-        if bert_location is None:
-            msg = "Directory containing BERT model must be specified."
-            raise Exception(msg)
-        else:
-            self.bert_location = bert_location
+
         if method not in ('concatenate', 'add', 'all'):
             msg = "Method can be 'concatenate', 'add' or 'all'."
             raise Exception(msg)
@@ -44,15 +41,15 @@ class BertTagger(Tagger):
         self.output_layer = output_layer
         self.input_layers = [sentences_layer]
 
-        self.bert_model = BertModel.from_pretrained(bert_location, output_hidden_states=True)
-        self.tokenizer = BertTokenizer.from_pretrained(self.bert_location)
+        self.bert_model = BertModel.from_pretrained(bert_model, output_hidden_states=True)
+        self.tokenizer = BertTokenizer.from_pretrained(bert_model)
 
         self.output_attributes = ['token', 'bert_embedding']
 
         self.token_level = token_level
         self.bert_layers = bert_layers
 
-    def _make_layer(self, text: Text, layers: MutableMapping[str, Layer], status: dict) -> Layer:
+    def _make_layer(self, text, layers: MutableMapping[str, Layer], status: dict) -> Layer:
         sentences_layer = layers[self.input_layers[0]]
         embeddings_layer = Layer(name=self.output_layer, text_object=text, attributes=self.output_attributes,
                                  ambiguous=True)

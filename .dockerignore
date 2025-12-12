@@ -1,6 +1,9 @@
-bert_model/
-config/*.env
-.idea/
-__pycache__/
+*.env
 .git/
 .gitignore
+*.md
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+.DS_Store

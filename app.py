@@ -1,32 +1,58 @@
 import logging
-from flask import request, abort
-from flask_cors import CORS
 
-from nauron import Nauron
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
-import settings
+from estnltk_core.common import load_text_class
+from estnltk_core.converters import layer_to_dict, json_to_layers
 
-logger = logging.getLogger("gunicorn.error")
+from settings import settings
+from bert_tagger import BertTagger
 
-# Define application
-app = Nauron(__name__, timeout=settings.MESSAGE_TIMEOUT, mq_parameters=settings.MQ_PARAMS)
-CORS(app)
+logger = logging.getLogger(__name__)
 
-bert = app.add_service(name=settings.SERVICE_NAME, remote=settings.DISTRIBUTED)
+app = FastAPI(redoc_url=None)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"]
+)
 
-if not settings.DISTRIBUTED:
-    from bert_tagger_worker import BertTaggerWorker
+Text = load_text_class()
+tagger = BertTagger(bert_model=settings.bert_model)
 
-    bert.add_worker(BertTaggerWorker())
+class Request(BaseModel):
+    text: str = Field(...)
+    meta: dict = Field(...)
+    layers: str = Field(...)
+    output_layer: str = Field(None)
+    parameters: dict = Field(None)
 
 
 @app.post('/estnltk/tagger/bert')
-def tagger_bert():
-    if request.content_length > settings.MAX_CONTENT_LENGTH:
-        abort(413)
-    response = bert.process_request(content=request.json)
-    return response
-
+def tagger_bert(body: Request):
+    if len(str(body)) > settings.max_content_length:
+        raise HTTPException(status_code=413, detail="Request body too large")
+    try:
+        logger.debug(body)
+        text = Text(body.text)
+        text.meta = body.meta
+        layers = json_to_layers(text, json_str=body.layers)
+        for layer in Text.topological_sort(layers):
+            text.add_layer(layer)
+        layer = tagger.make_layer(text, layers)
+        if body.output_layer is not None:
+            layer.name = body.output_layer
+        return layer_to_dict(layer)
+    
+    except ValueError as e:
+        # If tagger.make_layer throws a ValueError, report about a missing layer
+        raise HTTPException(status_code=400, detail='Error at input processing: {}'.format(str(e)))
+    except Exception:
+        logger.exception('Internal error at input processing')
+        raise HTTPException(status_code=500, detail='Internal error at input processing')
 
 @app.get('/estnltk/tagger/bert/about')
 def tagger_bert_about():
@@ -36,7 +62,3 @@ def tagger_bert_about():
 @app.get('/estnltk/tagger/bert/status')
 def tagger_bert_status():
     return 'OK'
-
-
-if __name__ == '__main__':
-    app.run()
